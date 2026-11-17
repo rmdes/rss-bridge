@@ -183,7 +183,18 @@ class AssociatedPressNewsBridge extends BridgeAbstract
         $imageUrl = $item['_imageUrl'];
         unset($item['_imageUrl']);
 
-        $html = getSimpleHTMLDOM($item['uri']);
+        try {
+            $html = getSimpleHTMLDOM($item['uri']);
+        } catch (\Exception $e) {
+            // Article pages sit behind a Cloudflare challenge that blocks many servers while the GraphQL API
+            // stays open: keep the item with the API's image and description instead of failing the feed.
+            $this->logger->info(sprintf('AP: article fetch failed for %s: %s', $item['uri'], $e->getMessage()));
+            if ($imageUrl) {
+                // description is used as-is, like the non-fallback path above
+                $item['content'] = '<img src="' . htmlspecialchars($imageUrl, ENT_QUOTES) . '"><p>' . $item['content'] . '</p>';
+            }
+            return;
+        }
 
         $isVideo = str_contains(parse_url($item['uri'], PHP_URL_PATH), '/video/');
         if ($isVideo) {
